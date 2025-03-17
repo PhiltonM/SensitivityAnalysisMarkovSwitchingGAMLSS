@@ -112,7 +112,7 @@ FitMarkovSwitchingGAMLSS <- function(x,
       ind = weights
       for(j in 1:N){
         if(type == "MSGLMLSS") {
-            mod[[j]] = glmboostLSS(y ~. , weights = ind[j,], data = data.frame(x, y), families = as.families("NO"), method = "noncyclic", control = boost_control(mstop = m.stop[j], nu = 0.1))
+            mod[[j]] = glmboostLSS(formula , weights = ind[j,], data = data.frame(x, y), families = as.families("NO"), method = "noncyclic", control = boost_control(mstop = m.stop[j], nu = 0.1))
         }
         if(type == "MSGAMLSS") {
           mod[[j]] = gamboostLSS(formula, weights = ind[j,], data = data.frame(x, y), families = as.families("NO"), method = "noncyclic", control = boost_control(mstop = m.stop[j], nu = 0.1))
