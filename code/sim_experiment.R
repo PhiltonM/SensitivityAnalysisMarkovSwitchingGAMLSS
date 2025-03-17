@@ -1,5 +1,5 @@
 source("code/functions.R")
-
+source("code/sim_data.R")
 init_state_probs_list <- list(
   matrix(c(0.99, 0.01, 0.01, 0.99), nrow = 2),
   matrix(c(0.95, 0.05, 0.05, 0.95), nrow = 2),
@@ -273,4 +273,5 @@ test <- FitMarkovSwitchingGAMLSS(
   conv.print = TRUE,
   formula = formula)
 formula <-as.formula(paste("y ~", paste("bols(", names(x), ")", collapse = " + ")))
-formula
+
+pred_states <- PredictStateSequence(test,y)

@@ -1,8 +1,14 @@
-
 if (!requireNamespace("renv", quietly = TRUE)) {
     install.packages("renv")
 }
 renv::activate()
+required_packages <- c("fda", "boot", "numDeriv", "gamlss", "gamboostLSS", "ggplot2", "dplyr", "reshape2")
+
+for (pkg in required_packages) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+        install.packages(pkg)
+    }
+}
 library(fda)
 library(boot)
 library(numDeriv)
@@ -10,7 +16,8 @@ library(gamlss)
 library(gamboostLSS)
 library(ggplot2)
 library(dplyr)
-required_packages <- c("fda", "boot", "numDeriv", "gamlss", "gamboostLSS", "ggplot2", "dplyr")
+library(reshape2)
+required_packages <- c("fda", "boot", "numDeriv", "gamlss", "gamboostLSS", "ggplot2", "dplyr", "reshape2")
 
 for (pkg in required_packages) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
@@ -137,65 +144,160 @@ FitMarkovSwitchingGAMLSS <- function(x,
   return(list(delta = delta.next, gamma = gamma.next, mod = mod, m.stop = m.stop, llh = llh, state.probs = weights, final_i = final_i))
 }
 
-# K-Fold Cross Validation
-
-cross_validate_msgamlss <- function(x, y, init_probs_list, type = "MSGLMLSS", formula = NULL) {
-  n <- length(y)
-  k <- 2
-  folds <- rep(1:2, length.out = n)
-  folds[seq(1, n, by = 2)] <- 1
-  folds[seq(2, n, by = 2)] <- 2
-  mse_list <- list()
-  accuracy_list <- list()
-  model_results_list <- list()
-  final_probs_list <- list()
-  final_iterations_list <- list()
+## Function to predict the optimal state sequence using the Viterbi algorithm
+PredictStateSequence <- function(model, y) {
+  N <- length(model$delta)
+  T <- length(y)
+  gamma <- model$gamma
+  fv.mu <- lapply(model$mod, function(m) as.vector(fitted(m$mu)))
+  fv.sigma <- lapply(model$mod, function(m) as.vector(fitted(m$sigma)))
   
-  total_iterations <- length(init_probs_list) * k
-  current_iteration <- 0
+  delta <- log(model$delta)
+  allprobs <- matrix(NA, T, N)
   
-  for (init_probs in init_probs_list) {
-    mse <- numeric(k)
-    accuracy <- numeric(k)
-    model_results <- list()
-    final_probs <- list()
-    final_iterations <- numeric(k)
-    
-    for (i in 1:k) {
-      train_indices <- which(folds != i)
-      test_indices <- which(folds == i)
-      
-      train_x <- x[train_indices, ]
-      train_y <- y[train_indices]
-      test_x <- x[test_indices, ]
-      test_y <- y[test_indices]
-      
-      model <- FitMarkovSwitchingGAMLSS(
-        x = as.matrix(train_x),
-        y = train_y,
-        init_state_trans_prob = init_probs,
-        max.iter = 500,
-        formula = formula)
-      
-
-
-      model_results[[i]] <- model
-      final_probs[[i]] <- model$gamma
-      final_iterations[i] <- model$final_i
-      
-      current_iteration <- current_iteration + 1
-      cat("Progress: ", round((current_iteration / total_iterations) * 100, 2), "%\n")
-    }
-    
-    model_results_list[[toString(init_probs)]] <- model_results
-    final_probs_list[[toString(init_probs)]] <- final_probs
-    final_iterations_list[[toString(init_probs)]] <- final_iterations
+  for (j in 1:N) {
+    allprobs[, j] <- apply(as.matrix(y), 2, dNO, mu = fv.mu[[j]], sigma = exp(fv.sigma[[j]]))
   }
   
-  return(list(
+  allprobs <- log(ifelse(!is.na(allprobs), allprobs, 1))
+  
+  viterbi <- matrix(NA, N, T)
+  backpointer <- matrix(NA, N, T)
+  
+  viterbi[, 1] <- delta + allprobs[1, ]
+  
+  for (t in 2:T) {
+    for (j in 1:N) {
+      max_prob <- -Inf
+      max_state <- NA
+      for (i in 1:N) {
+        prob <- viterbi[i, t - 1] + log(gamma[i, j]) + allprobs[t, j]
+        if (prob > max_prob) {
+          max_prob <- prob
+          max_state <- i
+        }
+      }
+      viterbi[j, t] <- max_prob
+      backpointer[j, t] <- max_state
+    }
+  }
+  
+  best_path <- numeric(T)
+  best_path[T] <- which.max(viterbi[, T])
+  
+  for (t in (T - 1):1) {
+    best_path[t] <- backpointer[best_path[t + 1], t + 1]
+  }
+  
+  return(best_path)
+}
 
-    model_results = model_results_list,
-    final_probs = final_probs_list,
-    final_iterations = final_iterations_list
-  ))
+# K-Fold Cross Validation
+
+cv_msgamlss <- function(x, y, states,init_probs_list, max_iter = 10, mstop = c(100,100), type = "MSGLMLSS", formula = NULL) {
+    n <- length(y)
+    k <- 2
+    folds <- rep(1:2, length.out = n)
+    folds[seq(1, n, by = 2)] <- 1
+    folds[seq(2, n, by = 2)] <- 2
+    mse_list <- list()
+    accuracy_list <- list()
+    model_results_list <- list()
+    final_probs_list <- list()
+    final_iterations_list <- list()
+    
+    total_iterations <- length(init_probs_list) * k
+    current_iteration <- 0
+    
+    for (init_probs in init_probs_list) {
+        mse <- numeric(k)
+        accuracy <- numeric(k)
+        model_results <- list()
+        final_probs <- list()
+        final_iterations <- numeric(k)
+        
+        for (i in 1:k) {
+            train_indices <- which(folds != i)
+            test_indices <- which(folds == i)
+            
+            train_x <- x[train_indices, ]
+            train_y <- y[train_indices]
+            test_x <- x[test_indices, ]
+            test_y <- y[test_indices]
+            test_states <- states[test_indices]
+            
+            model <- FitMarkovSwitchingGAMLSS(
+                x = as.matrix(train_x),
+                y = train_y,
+                init_state_trans_prob = init_probs,
+                max.iter = max_iter,
+                m.stop = mstop,
+                type = type,
+                formula = formula)
+            
+            predicted_states <- PredictStateSequence(model, test_y)
+
+            accuracy[i] <- mean(predicted_states == test_states)
+            
+            model_results[[i]] <- model
+            final_probs[[i]] <- model$gamma
+            final_iterations[i] <- model$final_i
+            
+            current_iteration <- current_iteration + 1
+            cat("Progress: ", round((current_iteration / total_iterations) * 100, 2), "%\n")
+        }
+        
+        model_results_list[[toString(init_probs)]] <- model_results
+        final_probs_list[[toString(init_probs)]] <- final_probs
+        final_iterations_list[[toString(init_probs)]] <- final_iterations
+        accuracy_list[[toString(init_probs)]] <- accuracy
+    }
+    
+    return(list(
+        model_results = model_results_list,
+        final_probs = final_probs_list,
+        final_iterations = final_iterations_list,
+        accuracy = accuracy_list
+    ))
+}
+
+cv_results <- function(results, init_state_probs_list, true_gamma, k) {
+    gamma_list <- matrix(NA, length(init_state_probs_list) * k, 5)
+    i <- 1
+    while (i <= length(init_state_probs_list) * k) {
+        for (model in 1:length(init_state_probs_list)) {
+            for (j in 1:k) {
+                gamma_list[i, 1] <- results$model_results[[model]][[j]]$gamma[1, 1]
+                gamma_list[i, 2] <- results$model_results[[model]][[j]]$gamma[1, 2]
+                gamma_list[i, 3] <- results$model_results[[model]][[j]]$gamma[2, 1]
+                gamma_list[i, 4] <- results$model_results[[model]][[j]]$gamma[2, 2]
+                gamma_list[i, 5] <- (abs(gamma_list[i, 1] - true_gamma[1, 1]) + abs(gamma_list[i, 2] - true_gamma[1, 2]) + abs(gamma_list[i, 3] - true_gamma[2, 1]) + abs(gamma_list[i, 4] - true_gamma[2, 2])) / 4
+                i <- i + 1
+            }
+        }
+    }
+    colnames(gamma_list) <- c("gamma_11", "gamma_12", "gamma_21", "gamma_22", "abs_diff")
+    gamma_df <- as.data.frame(gamma_list)
+    gamma_df <- reshape2::melt(gamma_df)
+    
+    results_df <- data.frame(
+        init_state_probs = rep(sapply(init_state_probs_list, function(x) paste(x, collapse = ",")), each = 10),
+        gamma_11 = gamma_list[, 1],
+        gamma_12 = gamma_list[, 2],
+        gamma_21 = gamma_list[, 3],
+        gamma_22 = gamma_list[, 4],
+        abs_dif = gamma_list[, 5],
+        accuracy = unlist(results$accuracy),
+        final_i = unlist(results$final_iterations)
+    )
+    
+    agg_results_df <- results_df %>%
+        group_by(init_state_probs) %>%
+        summarise(
+            mean_accuracy = mean(accuracy),
+            mean_final_i = round(mean(final_i)),
+            mean_abs_diff = mean(abs_dif)
+        )
+    
+    list(gamma_df = gamma_df, results_df = results_df, agg_results_df = agg_results_df)
 }
