@@ -1,29 +1,4 @@
-if (!requireNamespace("renv", quietly = TRUE)) {
-    install.packages("renv")
-}
-renv::activate()
-required_packages <- c("fda", "boot", "numDeriv", "gamlss", "gamboostLSS", "ggplot2", "dplyr", "reshape2")
 
-for (pkg in required_packages) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-        install.packages(pkg)
-    }
-}
-library(fda)
-library(boot)
-library(numDeriv)
-library(gamlss)
-library(gamboostLSS)
-library(ggplot2)
-library(dplyr)
-library(reshape2)
-required_packages <- c("fda", "boot", "numDeriv", "gamlss", "gamboostLSS", "ggplot2", "dplyr", "reshape2")
-
-for (pkg in required_packages) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-        install.packages(pkg)
-    }
-}
 ## Function that fits Markov-switching GAMLSS using the msgamboostLSS algorithm
 FitMarkovSwitchingGAMLSS <- function(x,
                                      y,

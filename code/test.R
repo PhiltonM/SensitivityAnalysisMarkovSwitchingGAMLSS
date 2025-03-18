@@ -1,3 +1,23 @@
+if (!requireNamespace("renv", quietly = TRUE)) {
+    install.packages("renv")
+}
+renv::activate()
+required_packages <- c("fda", "boot", "numDeriv", "gamlss", "gamboostLSS", "ggplot2", "dplyr", "reshape2")
+
+for (pkg in required_packages) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+        install.packages(pkg)
+    }
+}
+library(fda)
+library(boot)
+library(numDeriv)
+library(gamlss)
+library(gamboostLSS)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+
 source("code/functions.R")
 source("code/sim_data.R")
 
