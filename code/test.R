@@ -1,3 +1,9 @@
+# Set the working directory to the project root or appropriate directory
+setwd("c:/Users/philt/OneDrive - stud.uni-goettingen.de/Studium/Master/WiSe 2425/CTA/SensitivityAnalysisMarkovSwitchingGAMLSS")
+
+# Ensure the test directory path is correct
+testthat::test_dir("code")
+
 if (!requireNamespace("renv", quietly = TRUE)) {
     install.packages("renv")
 }
@@ -31,7 +37,7 @@ x_lin <- linear_data[,2:101]
 y_lin <- linear_data$y
 states_lin <- linear_data$states
 data <- data.frame(y = y_lin, x = x_lin, states = states_lin)
-formula <-as.formula(paste("y ~", paste("bols(", names(x_lin), ")", collapse = " + ")))
+formula <-as.formula(paste("y ~", paste( names(x_lin), collapse = " + ")))
 formula
 
 cv_linear <- cv_msgamlss(x = x_lin, y=y_lin, init_probs_list = init_state_probs_list, formula = formula, states = states_lin, type ="MSGLMLSS")
@@ -96,9 +102,9 @@ ggplot(gamma_lin_df, aes(x = variable, y = value)) +
   scale_x_discrete(labels = c(expression(gamma[11]), expression(gamma[12]), expression(gamma[21]), expression(gamma[22]))) +
   theme(legend.position = "none", axis.text.x = element_text(size = 14))
 
-ggplot(agg_results_lin_df, aes(x = init_state_probs, y = mean_mse)) +
+ggplot(agg_results_lin_df, aes(x = init_state_probs, y = mean_likelihood)) +
   geom_bar(stat = "identity") +
-  labs(title = "Mean MSE for Each Initial State Probability", x = "Initial State Probability", y = "Mean MSE") +
+  labs(title = "Mean Likelihood for Each Initial State Probability", x = "Initial State Probability", y = "Mean Likelihood") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
